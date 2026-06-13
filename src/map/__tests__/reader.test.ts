@@ -1,0 +1,78 @@
+import { describe, expect, it } from 'vitest';
+
+import { MapReader } from '../reader.js';
+import { MapStore } from '../store.js';
+import { type CellState, MapReadiness, MapScope, type MapStatus } from '../types.js';
+import { makeCell, makeSnapshot } from './fixtures.js';
+
+function status(readiness: MapReadiness = MapReadiness.Ready, connected = true): MapStatus {
+    return { getReadiness: () => readiness, isSocketConnected: () => connected };
+}
+
+function makeReader(cells: Array<CellState>, st: MapStatus = status()): { reader: MapReader; store: MapStore } {
+    const store = new MapStore();
+    store.applySnapshot(makeSnapshot({ version: 50, serverTime: 1000, cells }));
+    return { reader: new MapReader({ store, status: st }), store };
+}
+
+describe('MapReader', () => {
+    it('filters to owned cells with a resource index and a neighbour graph', () => {
+        const { reader } = makeReader([
+            makeCell({
+                tokenId: '1',
+                owner: '0xme',
+                updated: 50,
+                resources: [{ resourceId: 1, deposit: '10', balance: '0' }],
+            }),
+            makeCell({ tokenId: '2', x: 1, owner: '0xrival', updated: 40 }),
+        ]);
+
+        const result = reader.query({ scope: MapScope.Mine, tokenIds: null, around: null, ownerAddress: '0xme' });
+
+        expect(result.cells.map((c) => c.tokenId)).toEqual(['1']);
+        expect(result.resourceIndex?.['1']).toHaveLength(1);
+        expect(result.cells[0]?.neighbors).toHaveLength(6);
+        expect(result.summary.myCells).toBe(1);
+    });
+
+    it('returns a summary with no cells for scope=summary', () => {
+        const { reader } = makeReader([makeCell({ tokenId: '1', owner: '0xme', updated: 50 })]);
+
+        const result = reader.query({ scope: MapScope.Summary, tokenIds: null, around: null, ownerAddress: '0xme' });
+
+        expect(result.cells).toHaveLength(0);
+        expect(result.resourceIndex).not.toBeNull();
+        expect(result.summary.totalCells).toBe(1);
+    });
+
+    it('flags a still-loading map in the note', () => {
+        const { reader } = makeReader([makeCell({ tokenId: '1', updated: 50 })], status(MapReadiness.Loading));
+
+        const result = reader.query({ scope: MapScope.All, tokenIds: null, around: null, ownerAddress: null });
+
+        expect(result.note).toMatch(/loading/i);
+    });
+
+    it('inspects a cell with expanded neighbours and distance from owned cells', () => {
+        const { reader } = makeReader([
+            makeCell({ tokenId: 'target', x: 0, y: 0, owner: '0xrival', updated: 50 }),
+            makeCell({ tokenId: 'mine', x: 1, y: 0, owner: '0xme', updated: 50 }),
+        ]);
+
+        const inspection = reader.inspectCell('target', '0xme');
+
+        expect(inspection?.distanceFromMine).toBe(1);
+        expect(inspection?.neighbors.map((c) => c.tokenId)).toContain('mine');
+        expect(reader.inspectCell('missing', '0xme')).toBeNull();
+    });
+
+    it('returns only cells newer than the version for getChanges', () => {
+        const { reader, store } = makeReader([makeCell({ tokenId: '1', updated: 50 })]);
+        store.applyCell(makeCell({ tokenId: '2', x: 1, updated: 120 }));
+
+        const changes = reader.getChanges(50, null);
+
+        expect(changes.changed.map((c) => c.tokenId)).toEqual(['2']);
+        expect(changes.version).toBe(120);
+    });
+});

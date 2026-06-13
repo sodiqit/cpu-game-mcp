@@ -1,0 +1,81 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { describe, expect, it } from 'vitest';
+
+import { NoopLogger } from '../../../logger/noop.logger.js';
+import type { EnrichedCell, MapChanges } from '../../../map/types.js';
+import type { AppContext } from '../../../types.js';
+import { registerGetChangesTool } from '../get-changes/get-changes.js';
+
+interface ToolResult {
+    content: Array<{ type: string; text: string }>;
+}
+
+type Handler = (args: unknown) => Promise<ToolResult>;
+
+const CHANGED: EnrichedCell = {
+    tokenId: '9',
+    x: 0,
+    y: 0,
+    owner: '0xMe',
+    revealCount: 1,
+    resources: [{ resourceId: 4, deposit: '50', balance: '0' }],
+    building: null,
+    transitFeePerUnit: null,
+    mining: null,
+    crafting: [],
+    updated: 5,
+    neighbors: [],
+};
+
+function harness(): { handler: Handler; sinceArgs: Array<number> } {
+    const sinceArgs: Array<number> = [];
+    const map = {
+        getChanges(since: number): MapChanges {
+            sinceArgs.push(since);
+            return { version: 200, serverTime: 1, changed: [CHANGED], changedCount: 1 };
+        },
+    };
+    const wallet = { isReady: () => true, get: () => ({ getAddress: () => '0xMe' }) };
+    const appConfig = {
+        load: async (): Promise<{ resources: Record<number, string> }> => ({ resources: { 4: 'Iron Ore' } }),
+    };
+    const context = { mapReader: map, wallet, appConfig, logger: new NoopLogger() } as unknown as AppContext;
+
+    let captured: Handler | null = null;
+    const server = {
+        registerTool(_name: string, _def: unknown, handler: Handler): void {
+            captured = handler;
+        },
+    } as unknown as McpServer;
+
+    registerGetChangesTool(server, context);
+    if (captured === null) {
+        throw new Error('get_changes was not registered');
+    }
+    return { handler: captured, sinceArgs };
+}
+
+describe('get_changes tool', () => {
+    it('passes the provided version through', async () => {
+        const { handler, sinceArgs } = harness();
+        await handler({ sinceVersion: 120 });
+        expect(sinceArgs[0]).toBe(120);
+    });
+
+    it('defaults a null version to 0 (return everything)', async () => {
+        const { handler, sinceArgs } = harness();
+        await handler({ sinceVersion: null });
+        expect(sinceArgs[0]).toBe(0);
+    });
+
+    it('serializes the changes payload, with resource ids labeled from config', async () => {
+        const { handler } = harness();
+        const result = await handler({ sinceVersion: 0 });
+        const parsed = JSON.parse(result.content[1]?.text ?? '{}') as {
+            version: number;
+            changed: Array<{ resources: Array<{ resourceName: string }> }>;
+        };
+        expect(parsed.version).toBe(200);
+        expect(parsed.changed[0]?.resources[0]?.resourceName).toBe('Iron Ore');
+    });
+});

@@ -1,0 +1,24 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { CLAIM_CRAFT_DESCRIPTION } from './constants.js';
+import type { AppContext } from '../../../types.js';
+import { summarizeClaim } from '../format.utils.js';
+import { craftCellInputSchema } from '../types.js';
+
+export function registerClaimCraftTool(server: McpServer, context: AppContext): void {
+    server.registerTool(
+        'claim_craft',
+        { description: CLAIM_CRAFT_DESCRIPTION, inputSchema: craftCellInputSchema },
+        async (args) => {
+            const result = await context.craft.claim(args.tokenId);
+            const { resources } = await context.appConfig.load();
+
+            return {
+                content: [
+                    { type: 'text', text: summarizeClaim(result, resources) },
+                    { type: 'text', text: JSON.stringify(result) },
+                ],
+            };
+        },
+    );
+}

@@ -1,0 +1,41 @@
+import type { CellState, ISocketClient, SocketLifecycleHandlers } from '../map/types.js';
+
+/**
+ * Drives socket lifecycle events from tests. `connect` only registers handlers (mirroring a real
+ * socket, whose `connect` event fires asynchronously) — call `emitConnect` to simulate it.
+ */
+export class FakeMapSocket implements ISocketClient {
+    private handlers: SocketLifecycleHandlers | null = null;
+    private connected = false;
+
+    connect(handlers: SocketLifecycleHandlers): void {
+        this.handlers = handlers;
+    }
+
+    isConnected(): boolean {
+        return this.connected;
+    }
+
+    disconnect(): void {
+        this.connected = false;
+        this.handlers = null;
+    }
+
+    emitConnect(): void {
+        this.connected = true;
+        this.handlers?.onConnect();
+    }
+
+    emitDisconnect(reason = 'test'): void {
+        this.connected = false;
+        this.handlers?.onDisconnect(reason);
+    }
+
+    emitCell(cell: CellState): void {
+        this.handlers?.onCellUpdate(cell);
+    }
+
+    emitError(error: Error): void {
+        this.handlers?.onError(error);
+    }
+}

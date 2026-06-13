@@ -1,0 +1,19 @@
+import { z } from 'zod';
+
+import { CraftRecipeId } from '../../api/types.js';
+
+export const craftInputSchema = {
+    tokenId: z.string().describe('The tokenId of a cell you own to craft on.'),
+    recipeId: z.nativeEnum(CraftRecipeId).describe('Which recipe to run — see list_recipes for inputs/outputs/cost.'),
+    batches: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .default(1)
+        .describe('How many sequential batches to run; inputs are debited upfront for all of them.'),
+};
+
+export const craftCellInputSchema = {
+    tokenId: z.string().describe('The tokenId of the cell whose craft processes to act on.'),
+};

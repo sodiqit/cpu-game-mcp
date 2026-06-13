@@ -1,0 +1,40 @@
+import type { ApiClient } from './api/client.js';
+import type { EnvConfig } from './config/types.js';
+import type { ILogger } from './logger/types.js';
+import type { MapReader } from './map/reader.js';
+import type { MapSync } from './map/sync.js';
+import type { AppConfigService } from './services/app-config.service.js';
+import type { AuthService } from './services/auth.service.js';
+import type { BalanceService } from './services/balance.service.js';
+import type { BuildService } from './services/build.service.js';
+import type { CraftService } from './services/craft.service.js';
+import type { MiningService } from './services/mining.service.js';
+import type { RevealService } from './services/reveal.service.js';
+import type { TradeService } from './services/trade.service.js';
+import type { TransportService } from './services/transport.service.js';
+import type { SessionManager } from './session/manager.js';
+import type { WalletProvider } from './wallet/types.js';
+
+export enum WalletMode {
+    EVM = 'evm',
+    AGW = 'agw',
+}
+
+export interface AppContext {
+    config: EnvConfig;
+    session: SessionManager;
+    wallet: WalletProvider;
+    api: ApiClient;
+    auth: AuthService;
+    appConfig: AppConfigService;
+    reveal: RevealService;
+    build: BuildService;
+    craft: CraftService;
+    mining: MiningService;
+    transport: TransportService;
+    trade: TradeService;
+    balance: BalanceService;
+    mapSync: MapSync;
+    mapReader: MapReader;
+    logger: ILogger;
+}

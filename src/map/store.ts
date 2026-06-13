@@ -1,0 +1,106 @@
+import { isNewer } from './map.utils.js';
+import type { CellState, MapSnapshotResponse } from './types.js';
+
+function coordKey(x: number, y: number): string {
+    return `${x},${y}`;
+}
+
+/**
+ * In-memory map state. The single source of truth for every read; kept current by snapshot loads
+ * and realtime updates, all funnelled through `applyCell` so newer-wins holds everywhere.
+ */
+export class MapStore {
+    private readonly cells = new Map<string, CellState>();
+    private readonly coordIndex = new Map<string, string>();
+    // Authoritative resync cursor for `?since`. Advanced ONLY by server responses (applySnapshot),
+    // never by a single realtime cell — otherwise the cursor races ahead of what we actually hold and
+    // a later `?since` skips changes the socket missed, losing them for good.
+    private syncVersion = 0;
+    // Live high-water mark of cell.updated, advanced by every applied cell. Drives the local
+    // get_changes delta only — it never goes to the server, so it can't cause a `?since` skip.
+    private latestUpdated = 0;
+    private serverTime = 0;
+
+    applyCell(cell: CellState): boolean {
+        const held = this.cells.get(cell.tokenId) ?? null;
+        if (!isNewer(cell, held)) {
+            return false;
+        }
+
+        this.cells.set(cell.tokenId, cell);
+        this.coordIndex.set(coordKey(cell.x, cell.y), cell.tokenId);
+        if (cell.updated > this.latestUpdated) {
+            this.latestUpdated = cell.updated;
+        }
+        return true;
+    }
+
+    // Merges (never replaces) so a freshly-arrived realtime cell isn't clobbered by an older snapshot.
+    // The server-provided version is the only thing allowed to move the resync cursor.
+    applySnapshot(snapshot: MapSnapshotResponse): void {
+        for (const cell of snapshot.cells) {
+            this.applyCell(cell);
+        }
+        if (snapshot.serverTime > this.serverTime) {
+            this.serverTime = snapshot.serverTime;
+        }
+        if (snapshot.version > this.syncVersion) {
+            this.syncVersion = snapshot.version;
+        }
+    }
+
+    get(tokenId: string): CellState | null {
+        return this.cells.get(tokenId) ?? null;
+    }
+
+    getByCoord(x: number, y: number): CellState | null {
+        const tokenId = this.coordIndex.get(coordKey(x, y));
+        if (tokenId === undefined) {
+            return null;
+        }
+        return this.cells.get(tokenId) ?? null;
+    }
+
+    getByOwner(owner: string): Array<CellState> {
+        const lower = owner.toLowerCase();
+        const result: Array<CellState> = [];
+        for (const cell of this.cells.values()) {
+            if (cell.owner.toLowerCase() === lower) {
+                result.push(cell);
+            }
+        }
+        return result;
+    }
+
+    changedSince(version: number): Array<CellState> {
+        const result: Array<CellState> = [];
+        for (const cell of this.cells.values()) {
+            if (cell.updated > version) {
+                result.push(cell);
+            }
+        }
+        return result;
+    }
+
+    values(): IterableIterator<CellState> {
+        return this.cells.values();
+    }
+
+    // Cursor to send as `?since` — the last version the server vouched for.
+    getSyncVersion(): number {
+        return this.syncVersion;
+    }
+
+    // Freshness / get_changes cursor — the newest cell.updated we currently hold.
+    getLatestUpdated(): number {
+        return this.latestUpdated;
+    }
+
+    getServerTime(): number {
+        return this.serverTime;
+    }
+
+    size(): number {
+        return this.cells.size;
+    }
+}

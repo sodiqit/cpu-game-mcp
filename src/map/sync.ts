@@ -1,0 +1,196 @@
+import { MAP_HTTP_PATH, STARTUP_FETCH_RETRY_MS } from './constants.js';
+import { parseSnapshot } from './map.utils.js';
+import type { MapStore } from './store.js';
+import {
+    type CellState,
+    type IMapApi,
+    type ISocketClient,
+    MapReadiness,
+    type MapSocketFactory,
+    type MapStatus,
+    type MapSyncOptions,
+} from './types.js';
+import { HttpStatus } from '../api/types.js';
+import type { ILogger } from '../logger/types.js';
+import { errorMessage } from '../utils/error.utils.js';
+
+/**
+ * Keeps the store current: loads the initial snapshot, subscribes to the realtime stream, and
+ * resyncs/polls around disconnects. Built so an unreachable or flaky source never crashes the
+ * process — failures degrade to retries/polling and reads simply report staleness via readiness.
+ */
+export class MapSync implements MapStatus {
+    private readonly store: MapStore;
+    private readonly api: IMapApi;
+    private readonly socketFactory: MapSocketFactory;
+    private readonly logger: ILogger;
+    private readonly pollIntervalMs: number;
+    private readonly reconnectGraceMs: number;
+    private socket: ISocketClient | null = null;
+    private readiness = MapReadiness.Stopped;
+    private ready = false;
+    private pollTimer: ReturnType<typeof setInterval> | null = null;
+    private degradeTimer: ReturnType<typeof setTimeout> | null = null;
+    private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    constructor(options: MapSyncOptions) {
+        this.store = options.store;
+        this.api = options.api;
+        this.socketFactory = options.socketFactory;
+        this.logger = options.logger;
+        this.pollIntervalMs = options.pollIntervalMs;
+        this.reconnectGraceMs = options.reconnectGraceMs;
+    }
+
+    start(): void {
+        if (this.readiness !== MapReadiness.Stopped) {
+            return;
+        }
+        this.readiness = MapReadiness.Loading;
+        this.logger.info('starting map sync');
+
+        // Connect first so realtime updates buffer into the store before the snapshot lands; the
+        // newer-wins merge then guarantees a fresh event isn't overwritten by an older snapshot cell.
+        this.socket = this.socketFactory({ baseUrl: this.api.getBaseUrl(), logger: this.logger.child('socket') });
+        this.socket.connect({
+            onConnect: () => this.handleConnect(),
+            onDisconnect: (reason) => this.handleDisconnect(reason),
+            onError: (error) => this.handleError(error),
+            onCellUpdate: (cell) => this.handleCellUpdate(cell),
+        });
+
+        void this.bootstrapSnapshot();
+    }
+
+    getReadiness(): MapReadiness {
+        return this.readiness;
+    }
+
+    isSocketConnected(): boolean {
+        return this.socket?.isConnected() ?? false;
+    }
+
+    stop(): void {
+        this.stopPolling();
+        this.clearDegradeTimer();
+        if (this.retryTimer !== null) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = null;
+        }
+        if (this.socket !== null) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
+        this.readiness = MapReadiness.Stopped;
+    }
+
+    private async bootstrapSnapshot(): Promise<void> {
+        try {
+            const { status, data } = await this.api.request<unknown>(MAP_HTTP_PATH);
+            if (status !== HttpStatus.Ok) {
+                throw new Error(`snapshot request returned ${status}`);
+            }
+            this.store.applySnapshot(parseSnapshot(data));
+            this.logger.info('map snapshot loaded', { cells: this.store.size(), version: this.store.getSyncVersion() });
+            this.markReady();
+        } catch (error) {
+            this.logger.error('map snapshot load failed — retrying', { error: errorMessage(error) });
+            this.scheduleRetry();
+        }
+    }
+
+    private async resync(): Promise<void> {
+        const since = this.store.getSyncVersion();
+        try {
+            const { status, data } = await this.api.request<unknown>(`${MAP_HTTP_PATH}?since=${since}`);
+            if (status !== HttpStatus.Ok) {
+                throw new Error(`resync request returned ${status}`);
+            }
+            const snapshot = parseSnapshot(data);
+            this.store.applySnapshot(snapshot);
+            this.logger.info('map resynced', {
+                since,
+                changed: snapshot.cells.length,
+                version: this.store.getSyncVersion(),
+            });
+        } catch (error) {
+            this.logger.warn('map resync failed', { error: errorMessage(error) });
+        }
+    }
+
+    private handleConnect(): void {
+        this.logger.info('map socket connected');
+        this.clearDegradeTimer();
+        this.stopPolling();
+        if (this.readiness === MapReadiness.Degraded) {
+            this.readiness = MapReadiness.Ready;
+        }
+        // A first connect before the snapshot is covered by the bootstrap fetch; once we have a
+        // server-vouched version, a reconnect needs a delta to backfill events missed while down.
+        if (this.store.getSyncVersion() > 0) {
+            void this.resync();
+        }
+    }
+
+    private handleDisconnect(reason: string): void {
+        this.logger.warn('map socket disconnected', { reason });
+        if (this.degradeTimer !== null || !this.ready) {
+            return;
+        }
+        this.degradeTimer = setTimeout(() => {
+            this.degradeTimer = null;
+            this.readiness = MapReadiness.Degraded;
+            this.startPolling();
+        }, this.reconnectGraceMs);
+    }
+
+    private handleError(error: Error): void {
+        this.logger.warn('map socket error', { error: error.message });
+    }
+
+    private handleCellUpdate(cell: CellState): void {
+        if (this.store.applyCell(cell)) {
+            this.logger.debug('cell updated', { tokenId: cell.tokenId, latest: this.store.getLatestUpdated() });
+        }
+    }
+
+    private markReady(): void {
+        this.ready = true;
+        if (this.readiness === MapReadiness.Loading) {
+            this.readiness = MapReadiness.Ready;
+        }
+    }
+
+    private scheduleRetry(): void {
+        if (this.retryTimer !== null) {
+            return;
+        }
+        this.retryTimer = setTimeout(() => {
+            this.retryTimer = null;
+            void this.bootstrapSnapshot();
+        }, STARTUP_FETCH_RETRY_MS);
+    }
+
+    private startPolling(): void {
+        if (this.pollTimer !== null || !this.ready) {
+            return;
+        }
+        this.pollTimer = setInterval(() => {
+            void this.resync();
+        }, this.pollIntervalMs);
+    }
+
+    private stopPolling(): void {
+        if (this.pollTimer !== null) {
+            clearInterval(this.pollTimer);
+            this.pollTimer = null;
+        }
+    }
+
+    private clearDegradeTimer(): void {
+        if (this.degradeTimer !== null) {
+            clearTimeout(this.degradeTimer);
+            this.degradeTimer = null;
+        }
+    }
+}

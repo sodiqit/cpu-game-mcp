@@ -1,0 +1,73 @@
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { describe, expect, it } from 'vitest';
+
+import { BuildingType, CraftCategory, CraftRecipeId } from '../../../api/types.js';
+import { Network } from '../../../config/types.js';
+import { NoopLogger } from '../../../logger/noop.logger.js';
+import type { AppConfig } from '../../../services/types.js';
+import type { AppContext } from '../../../types.js';
+import { registerGetGameConfigTool } from '../get-game-config/get-game-config.js';
+
+interface ToolResult {
+    content: Array<{ type: string; text: string }>;
+}
+
+const CONFIG: AppConfig = {
+    network: Network.ETHEREUM,
+    chainId: 1,
+    contracts: {
+        land: '0xland',
+        cpuToken: '0xcpu',
+        gameSettlement: '0x1111111111111111111111111111111111111111',
+    },
+    resources: { 3: 'Silica' },
+    recipes: [
+        {
+            id: CraftRecipeId.GeneratePower,
+            name: 'Generate Power',
+            category: CraftCategory.Refine,
+            tier: 2,
+            inputs: [],
+            outputs: [],
+            durationSec: 30,
+            costCpu: '0',
+        },
+    ],
+    buildings: [{ type: BuildingType.Extractor, name: 'Extractor', buildCost: '2000' }],
+    reveal: { firstFree: true, reRevealCost: '1000' },
+};
+
+function capture(): (args: never) => Promise<ToolResult> {
+    const context = {
+        appConfig: { load: async () => CONFIG },
+        logger: new NoopLogger(),
+    } as unknown as AppContext;
+    let captured: ((args: never) => Promise<ToolResult>) | null = null;
+    const server = {
+        registerTool(_name: string, _def: unknown, handler: (args: never) => Promise<ToolResult>): void {
+            captured = handler;
+        },
+    } as unknown as McpServer;
+    registerGetGameConfigTool(server, context);
+    if (captured === null) {
+        throw new Error('tool was not registered');
+    }
+    return captured;
+}
+
+describe('get_game_config tool', () => {
+    it('summarizes the rulebook and returns the full config', async () => {
+        const result = await capture()({} as never);
+
+        const header = result.content[0]?.text ?? '';
+        expect(header).toMatch(/Network ethereum \(chainId 1\)/);
+        expect(header).toMatch(/Extractor 2000 \$CPU/);
+        expect(header).toMatch(/first reveal free, re-reveal 1000 \$CPU/);
+        expect(header).toMatch(/1 recipe\(s\)/);
+        expect(header).toMatch(/3:Silica/);
+
+        const json = JSON.parse(result.content[1]?.text ?? '{}') as AppConfig;
+        expect(json.buildings[0]?.buildCost).toBe('2000');
+        expect(json.reveal.reRevealCost).toBe('1000');
+    });
+});

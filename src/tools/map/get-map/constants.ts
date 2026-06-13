@@ -1,0 +1,11 @@
+export const GET_MAP_DESCRIPTION = [
+    'Read the live game world. The map is loaded at startup and kept current in the background;',
+    'this returns a snapshot of it on demand (you only see updates when you call a tool).',
+    'The map is public — you can see every player. Resources live on cells.',
+    'Always returns a "summary" (counts + freshness) and, when your wallet is known, a "resourceIndex"',
+    '(resourceId → your cells holding it, with location). Cells come back as a graph: each carries axial',
+    'x/y and "neighbors" (the 6 adjacent hexes, each owned/other/empty).',
+    'Scopes: "mine" (your cells), "around" (cells within a hex radius — scout a region),',
+    '"cells" (specific tokenIds), "all" (everything), "summary" (no cells). Default: "mine", else "summary".',
+    'Note units: version/updated are epoch ms, serverTime/startAt are unix seconds, amounts are decimal strings.',
+].join(' ');

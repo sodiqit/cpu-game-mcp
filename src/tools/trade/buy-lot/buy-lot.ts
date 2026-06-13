@@ -1,0 +1,27 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { BUY_LOT_DESCRIPTION } from './constants.js';
+import type { AppContext } from '../../../types.js';
+import { summarizeLotResult } from '../format.utils.js';
+import { buyLotInputSchema } from '../types.js';
+
+export function registerBuyLotTool(server: McpServer, context: AppContext): void {
+    server.registerTool(
+        'buy_lot',
+        { description: BUY_LOT_DESCRIPTION, inputSchema: buyLotInputSchema },
+        async (args) => {
+            const result = await context.trade.buyLot({
+                lotId: args.lotId,
+                chain: args.chain,
+                value: args.value,
+            });
+
+            return {
+                content: [
+                    { type: 'text', text: summarizeLotResult(result) },
+                    { type: 'text', text: JSON.stringify(result) },
+                ],
+            };
+        },
+    );
+}
