@@ -24,29 +24,19 @@ The only required setting is your wallet's `PRIVATE_KEY`:
 }
 ```
 
-`@latest` makes `npx` check the registry on every launch so you always run the newest version.
-`npx` caches packages, so **without** `@latest` you may keep running an old cached build. To
-pin a specific version instead, use `cpu-game-mcp@0.1.0`.
-
-> Your private key signs game actions and on-chain transactions. Keep it secret — pass it via
-> your client's env config, never commit it.
-
 ## Environment variables
 
 **Required**
 
 | Variable | Description |
 | --- | --- |
-| `PRIVATE_KEY` | Your wallet private key — `0x` followed by 64 hex chars (32 bytes). Required in the default `evm` wallet mode. Not used in `agw` mode. |
+| `PRIVATE_KEY` | Your wallet private key — `0x` followed by 64 hex chars (32 bytes). |
 
-**Optional / advanced** — all have sensible defaults; normal users can omit every one of these.
+**Optional** — has a sensible default; normal users can omit it.
 
 | Variable | Default | When you need it |
 | --- | --- | --- |
-| `WALLET_MODE` | `evm` | Set to `agw` to authenticate via the Abstract Global Wallet Device-Authorization flow instead of a raw private key. |
-| `NETWORK` | `ethereum` | Target chain. Only change for local development against a testnet: `ethereum_sepolia`, `base`, `base_sepolia`. |
 | `RPC_URL` | chain's public RPC | A custom RPC endpoint for sending on-chain transactions (e.g. `reveal`). |
-| `API_URL` | game API | Override the game API base URL (local development only). |
 
 Session state (JWT / session keys) is persisted to `~/.cpu-game/`.
 
