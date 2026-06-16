@@ -4,8 +4,10 @@ export const MAP_HTTP_PATH = '/api/v1/map';
 
 // Namespace and engine path are distinct socket.io concepts: the namespace is appended to the base
 // URL (`<base>/map`), the path is the engine mount. Conflating them is a classic connection bug.
+// The engine is mounted under `/api` so the WebSocket upgrade rides the same edge route as the HTTP
+// API instead of a separate top-level path; this must match the server's gateway path exactly.
 export const MAP_SOCKET_NAMESPACE = '/map';
-export const MAP_SOCKET_PATH = '/socket.io';
+export const MAP_SOCKET_PATH = '/api/socket.io';
 
 export const CELL_UPDATE_EVENT = 'cell_update';
 
