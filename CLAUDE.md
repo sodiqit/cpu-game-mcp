@@ -113,6 +113,20 @@ pnpm format
 
 Run `pnpm lint && pnpm build && pnpm typecheck && pnpm test` before every commit.
 
+## Releasing
+
+Bump the version **only** with `pnpm version <patch|minor|major>` — never hand-edit the `version` field in `package.json`. The command bumps `package.json`, creates the release commit (message = the bare version, e.g. `0.1.4`) and the matching `v<version>` git tag in one atomic step. It refuses to run on a dirty tree, so commit your code/doc changes first; the version commit is the last commit before the tag.
+
+Pick the bump by what changed in the **public surface** (the MCP tools, their inputs/outputs, env vars, supported networks) — not by how big the diff is:
+
+- `patch` (`0.1.3 → 0.1.4`) — backwards-compatible bug fix or internal change with no change to tool behaviour, inputs, or outputs. Example: fixing the map socket path.
+- `minor` (`0.1.3 → 0.2.0`) — backwards-compatible new capability: a new tool, a new **optional** input, a new env var with a default, an additive output field.
+- `major` (`0.1.3 → 1.0.0`) — breaking change to the public surface: removing/renaming a tool, making an input required or changing its type, changing an output shape consumers depend on, or dropping a network/env var.
+
+Pre-1.0 caveat: while still on `0.x`, breaking changes are allowed and bump the **minor** (`0.x` is treated as unstable). Call the break out explicitly in the commit body / release notes.
+
+Publishing is automated: push the commit **and** the tag (`git push --follow-tags`). The `v*` tag triggers `.github/workflows/release.yml`, which re-runs lint/typecheck/build/unit tests, verifies the tag matches `package.json`, and runs `npm publish` (OIDC trusted publishing + provenance). End users get it via `npx cpu-game-mcp@latest`.
+
 ## Git
 
 Omit the `Co-Authored-By: Claude ...` trailer from commit messages.
