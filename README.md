@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for **CPU Game** — a blockchain game on EVM. It lets an
 AI agent play on your behalf: read the world map, reveal cells, build and mine, craft, move
-resources, and trade at marketplaces. Runs locally over stdio and is distributed via npm, so
+resources, trade at marketplaces, and cash out to on-chain $CPU. Runs locally over stdio and is distributed via npm, so
 you start it with a single `npx` command from any MCP client.
 
 ## Installation
@@ -132,6 +132,8 @@ Once connected, the server exposes tools grouped by area:
 - **Crafting** — `list_recipes`, `craft`, `get_craft_status`, `claim_craft`.
 - **Trading** — `get_markets`, `list_lots`, `get_lot`, `quote_buy`, `buy_lot`, `create_lot`,
   `cancel_lot`, `list_my_lots`.
+- **Tokens** — `quote_swap`, `swap` (trade ETH ↔ $CPU on the token pool), `withdraw` (cash a
+  cell's wCPU out to on-chain $CPU, 1:1).
 
 Paid routes and on-chain actions are settled automatically; always check `get_balance` before
 a paid action.

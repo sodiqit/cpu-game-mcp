@@ -125,6 +125,35 @@ export interface BuildResult {
     blockNumber: string;
 }
 
+export interface WithdrawServiceOptions {
+    api: ApiClient;
+    wallet: WalletProvider;
+    appConfig: IAppConfig;
+    allowance: IAllowanceService;
+    logger: ILogger;
+}
+
+export interface WithdrawInput {
+    tokenId: string;
+    /** Whole wCPU units to cash out (e.g. `"100"`). */
+    amount: string;
+}
+
+/** A confirmed withdraw — the on-chain mint of $CPU against a cell's debited wCPU (1:1). */
+export interface WithdrawResult {
+    tokenId: string;
+    signId: number;
+    /** wCPU debited / $CPU minted, in wei. */
+    amount: string;
+    txHash: Hash;
+    /** Always null — a withdraw mints $CPU, so no $CPU approve is ever needed. Kept for shape parity. */
+    approveTxHash: Hash | null;
+    status: TxStatus;
+    blockNumber: string;
+    /** True when this finished an already-signed (interrupted) withdraw instead of starting a new one. */
+    resumed: boolean;
+}
+
 export interface MiningServiceOptions {
     api: ApiClient;
     logger: ILogger;

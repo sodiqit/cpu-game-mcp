@@ -32,6 +32,7 @@ import { registerListMyTransportsTool } from './tools/transport/list-mine/list-m
 import { registerQuoteTransportTool } from './tools/transport/quote/quote-transport.js';
 import { registerResumeTransportTool } from './tools/transport/resume/resume-transport.js';
 import { registerTransportTool } from './tools/transport/transport.js';
+import { registerWithdrawTool } from './tools/withdraw/withdraw.js';
 import type { AppContext } from './types.js';
 
 const SERVER_INSTRUCTIONS = [
@@ -53,6 +54,9 @@ const SERVER_INSTRUCTIONS = [
     'Refine and forge resources with `craft` — discover recipes via `list_recipes` (the `forge_wcpu` recipe',
     'is paid in $CPU and auto-settled on-chain, the rest are free); read progress with `get_craft_status` and',
     'bank matured batches with `claim_craft`.',
+    'Cash out a cell’s wCPU to the on-chain $CPU token (1:1) with `withdraw` — one in flight at a time; re-run',
+    'with the same args to finish an interrupted one, and withdraw before selling a cell since wCPU travels',
+    'with it.',
     'Trade at Hubs: survey the marketplace with `get_markets` then `list_lots`, inspect one with `get_lot`,',
     'and act with `create_lot` (list goods), `buy_lot` (preview cost first with `quote_buy`), and `cancel_lot`',
     '— paid routes auto-settle on-chain; track your lots with `list_my_lots`.',
@@ -94,6 +98,7 @@ export async function createServer(context: AppContext): Promise<void> {
     registerQuoteSwapTool(server, context);
     registerSwapTool(server, context);
     registerGetBalanceTool(server, context);
+    registerWithdrawTool(server, context);
 
     const stdio = new StdioServerTransport();
     await server.connect(stdio);

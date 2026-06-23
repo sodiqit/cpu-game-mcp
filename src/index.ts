@@ -23,6 +23,7 @@ import { RevealService } from './services/reveal.service.js';
 import { SwapService } from './services/swap.service.js';
 import { TradeService } from './services/trade.service.js';
 import { TransportService } from './services/transport.service.js';
+import { WithdrawService } from './services/withdraw.service.js';
 import { SessionManager } from './session/manager.js';
 import { SessionStorage } from './session/storage.js';
 import type { AppContext } from './types.js';
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
     const trade = new TradeService({ api, wallet, appConfig, allowance, logger: logger.child('trade') });
     const swap = new SwapService({ wallet, appConfig, allowance, logger: logger.child('swap') });
     const balance = new BalanceService({ wallet, appConfig, logger: logger.child('balance') });
+    const withdraw = new WithdrawService({ api, wallet, appConfig, allowance, logger: logger.child('withdraw') });
 
     const store = new MapStore();
     const mapSync = new MapSync({
@@ -92,6 +94,7 @@ async function main(): Promise<void> {
         trade,
         swap,
         balance,
+        withdraw,
         mapSync,
         mapReader,
         logger,

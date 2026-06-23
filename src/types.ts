@@ -13,6 +13,7 @@ import type { RevealService } from './services/reveal.service.js';
 import type { SwapService } from './services/swap.service.js';
 import type { TradeService } from './services/trade.service.js';
 import type { TransportService } from './services/transport.service.js';
+import type { WithdrawService } from './services/withdraw.service.js';
 import type { SessionManager } from './session/manager.js';
 import type { WalletProvider } from './wallet/types.js';
 
@@ -36,6 +37,7 @@ export interface AppContext {
     trade: TradeService;
     swap: SwapService;
     balance: BalanceService;
+    withdraw: WithdrawService;
     mapSync: MapSync;
     mapReader: MapReader;
     logger: ILogger;
